@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aegis Track</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<nav>
+  <div class="logo-container">
+    <div class="logo" onclick="toggleLogoutBtn()"><span class="accent-box">A</span> Aegis Tracker</div>
+    <button id="logout-btn" onclick="handleLogout()" class="secondary-btn"
+            style="display: none; margin-top: 10px; position: absolute; opacity: 1; background-color: red">Log Out
+    </button>
+  </div>
+  <ul class="nav-links" id="main-nav" style="display: none;">
+    <li><a href="#" onclick="navigate('presentation-view')">Home</a></li>
+    <li><a href="#" onclick="navigate('market-view')">Market</a></li>
+    <li><a href="#" onclick="navigate('master-view')">Watchlist</a></li>
+    <li><a href="#" onclick="navigate('inventory-view')">Inventory</a></li>
+    <li><a href="#" id="nav-admin" style="display: none; color: #ff4444" ; onclick="navigate('observation-list')">Suspects</a>
+    </li>
+  </ul>
+</nav>
+
+<main>
+  <section id="login-view" class="view active">
+    <div class="login-container">
+      <div class="hero" style="margin-top: 0; margin-bottom: 30px;">
+        <h2>Welcome Back</h2>
+        <p>Sign in to access your dashboard.</p>
+      </div>
+      <div class="form-container" style="margin: 0 auto;">
+        <form id="login-form" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" required placeholder="Trader ID">
+          </div>
+          <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" required placeholder="••••••••">
+          </div>
+          <button type="submit" class="primary-btn" style="width: 100%;">Log In</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="presentation-view" class="view">
+    <div class="hero">
+      <h1>Aegis Tracker</h1>
+      <h2>Master the Skins. Own the Playfield.</h2>
+      <p>An intelligent financial dashboard for Counter-Strike 2 skin buying and market scanning.</p>
+      <button class="primary-btn" onclick="navigate('market-view')">Enter the Market</button>
+    </div>
+  </section>
+
+  <section id="master-view" class="view">
+    <div class="header-action">
+      <h2>Active Watchlist</h2>
+      <button class="primary-btn" onclick="openCreateForm()">+ Add New Skin</button>
+    </div>
+
+    <div class="table-container" id="watchlist-scroll-container">
+      <table id="watchlist-table">
+        <thead>
+        <tr>
+          <th>Item Name</th>
+          <th>Float Value</th>
+          <th>Target Price</th>
+          <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody id="table-body">
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="detail-view" class="view">
+    <h2 id="form-title">Skin Details</h2>
+    <div class="form-container">
+      <form id="crud-form" onsubmit="saveItem(event)">
+        <input type="hidden" id="item-id">
+
+        <div class="form-group">
+          <label for="item-name">Skin Name:</label>
+          <input type="text" id="item-name" required placeholder="e.g. AK-47 | Redline">
+        </div>
+
+        <div class="form-group">
+          <label for="item-float">Target Float (0.00 - 1.00):</label>
+          <input type="number" id="item-float" required min="0" max="1" step="0.0001">
+        </div>
+
+        <div class="form-group">
+          <label for="item-price">Target Buy Price ($):</label>
+          <input type="number" id="item-price" required min="0.01" step="0.01">
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-btn">Save Item</button>
+          <button type="button" class="secondary-btn" onclick="navigate('master-view')">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="skin-detail-view" class="view">
+    <button class="secondary-btn" onclick="navigate('master-view')" style="margin-bottom: 20px;">&larr; Back to
+      Watchlist
+    </button>
+
+    <div class="skin-detail-container">
+      <div class="skin-image-box">
+        <span style="color: #666;">[ Item Image Placeholder ]</span>
+      </div>
+      <div class="skin-info-box">
+        <h2 id="presentation-name">AK-47 | Slate</h2>
+        <p id="presentation-rarity">Restricted Grade</p>
+
+        <div class="detail-stat">
+          <span class="stat-label">Current Price:</span>
+          <span id="presentation-price" class="stat-value price-green">$12.45</span>
+        </div>
+        <div class="detail-stat">
+          <span class="stat-label">Float Value:</span>
+          <span id="presentation-float" class="stat-value">0.1502</span>
+        </div>
+
+        <button class="buy-btn">(! ) Buy on Steam</button>
+      </div>
+    </div>
+
+    <div class="trend-chart-container">
+      <h3>30-Day Price Trend</h3>
+      <canvas id="priceTrendChart"></canvas>
+    </div>
+  </section>
+
+  <section id="market-view" class="view">
+    <h2>Market Highlights</h2>
+    <p style="color: var(--text-muted); margin-bottom: 20px;">Discover trending and high-ROI opportunities.</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-trending" onclick="switchTab('trending')">Trending</button>
+      <button class="tab-btn" id="tab-new" onclick="switchTab('new')">New Arrivals</button>
+      <button class="tab-btn" id="tab-roi" onclick="switchTab('roi')">Highest ROI</button>
+    </div>
+
+    <div id="market-grid" class="market-grid">
+    </div>
+  </section>
+
+  <section id="inventory-view" class="view">
+    <div class="portfolio-header">
+      <h1 id="total-portfolio-value">$0.00</h1>
+      <p>Total Portfolio Value</p>
+    </div>
+
+    <div class="charts-container">
+
+      <div class="chart-card">
+        <div class="header-action" style="align-items: flex-start; margin-bottom: 0;">
+          <div>
+            <h3>Asset Allocation</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Financial split by item type</p>
+          </div>
+          <div class="toggle-container">
+            <span id="asset-chart-label" style="margin-right: 10px; color: var(--text-muted); font-size: 0.9rem;">Donut Chart</span>
+            <label class="switch">
+              <input type="checkbox" id="asset-chart-toggle" onchange="toggleAssetChart()">
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="assetChart"></canvas>
+        </div>
+        <div id="asset-legend" class="inventory-legend"></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="header-action" style="align-items: flex-start; margin-bottom: 0;">
+          <div>
+            <h3>Rarity Distribution</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Skins categorized by tier</p>
+          </div>
+          <div class="toggle-container">
+            <span id="rarity-chart-label" style="margin-right: 10px; color: var(--text-muted); font-size: 0.9rem;">Donut Chart</span>
+            <label class="switch">
+              <input type="checkbox" id="rarity-chart-toggle" onchange="toggleRarityChart()">
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="rarityChart"></canvas>
+        </div>
+        <div id="rarity-legend" class="inventory-legend"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="observation-list" class="view">
+    <div class="header-action">
+      <div>
+        <h2>Security Dashboard</h2>
+        <p style="color: var(--text-muted);">Monitor system activity and malevolent behaviors.</p>
+      </div>
+    </div>
+
+    <!-- The Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-suspects" onclick="switchAdminTab('suspects')">Observation List</button>
+      <button class="tab-btn" id="tab-logs" onclick="switchAdminTab('logs')">Raw Activity Logs</button>
+    </div>
+
+    <!-- PANEL 1: Observation List (Your existing table) -->
+    <div id="panel-suspects">
+      <div class="table-container">
+        <table>
+          <thead>
+          <tr>
+            <th>User ID</th>
+            <th>Reason Flagged</th>
+            <th>Timestamp (UTC)</th>
+          </tr>
+          </thead>
+          <tbody id="admin-table-body">
+            <!-- Suspect Data goes here -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button class="secondary-btn" id="admin-prev" onclick="loadAdminPage(-1)">Previous</button>
+        <span id="admin-page-indicator" style="color: var(--text-muted);">Page 1</span>
+        <button class="secondary-btn" id="admin-next" onclick="loadAdminPage(1)">Next</button>
+      </div>
+    </div>
+
+    <!-- PANEL 2: System Logs -->
+    <div id="panel-logs" style="display: none;">
+      <div class="table-container">
+        <table>
+          <thead>
+          <tr>
+            <th>ID</th>
+            <th>Gold Challenge Log Format</th>
+          </tr>
+          </thead>
+          <tbody id="admin-logs-table-body">
+            <!-- Log Data goes here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- GLOBAL TRADE CHAT -->
+  <div id="chat-container" style="position: fixed; bottom: 20px; right: 20px; width: 300px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; display: none; flex-direction: column;">
+    <div style="background: var(--accent-green); color: black; padding: 10px; font-weight: bold; border-top-left-radius: 8px; border-top-right-radius: 8px;">
+      Live Trade Chat
+    </div>
+    <div id="chat-messages" style="height: 200px; overflow-y: auto; padding: 10px; font-size: 0.9rem; color: var(--text-main);">
+      <!-- Messages appear here -->
+    </div>
+    <div style="display: flex; border-top: 1px solid var(--border-color);">
+      <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; padding: 10px; border: none; background: transparent; color: white; outline: none;">
+      <button onclick="sendChatMessage()" style="padding: 10px; background: transparent; color: var(--accent-green); border: none; cursor: pointer; font-weight: bold;">Send</button>
+    </div>
+  </div>
+
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/database.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
