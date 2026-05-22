@@ -566,6 +566,115 @@ thead th {
   color: var(--accent-green);
 }
 
+/* --- DEDICATED CHAT VIEW INTERFACE --- */
+/* --- DEDICATED CHAT VIEW INTERFACE --- */
+
+.chat-dashboard-layout {
+  display: flex;
+  justify-content: flex-start;
+  height: 75vh; /* Fixed relative height: 75% of screen */
+  max-height: 75vh;
+  margin-top: 20px;
+}
+
+/* The White Rectangle Chat Box Container */
+.chat-main-rectangle {
+  width: 30vw; /* Forces the chat box to be exactly 30% of the screen width */
+  min-width: 320px; /* Safety fallback: stops the chat from breaking/getting too squished on small windows */
+  background-color: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column; /* Stacks messages on top, input on bottom */
+  height: 100%; /* Fills the 75vh layout height completely */
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+/* Internal Message Scroller */
+.chat-messages-box {
+  flex: 1; /* Automatically consumes all available vertical space */
+  overflow-y: auto; /* Scrollbar appears only inside this container */
+  padding: 25px;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Message Formatting for Light Background */
+.chat-messages-box div {
+  color: #1a202c; /* Clear dark charcoal text for high readability */
+  font-size: 0.95rem;
+  background-color: #f7fafc; /* Light gray bubble backing to isolate text */
+  padding: 8px 14px;
+  border-radius: 8px;
+  width: fit-content;
+  max-width: 85%;
+  border: 1px solid #edf2f7;
+}
+
+/* Input Area: Hard-pinned to the bottom layout boundary */
+.chat-input-area {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  background-color: #f8fafc; /* Distinct light-gray panel footer */
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Upgraded Input Field Box */
+.chat-input-area input {
+  flex: 1;
+  padding: 16px; /* Substantially larger input target */
+  font-size: 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #1a202c;
+  transition: all 0.2s ease;
+}
+
+.chat-input-area input:focus {
+  outline: 2px solid var(--accent-green);
+  border-color: transparent;
+}
+
+/* High Contrast Send Button */
+.chat-send-btn {
+  padding: 0 28px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  background-color: #0f172a; /* Slate black button looks striking against white */
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.chat-send-btn:hover {
+  background-color: #1e293b;
+}
+
+/* Right Column Sidebar Configuration */
+.chat-sidebar-rectangle {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+}
+
+.sidebar-placeholder {
+  text-align: center;
+  opacity: 0.6;
+}
+
+/* this text uWu */
 /* ========================================= */
 /* MOBILE RESPONSIVE MEDIA QUERIES           */
 /* ========================================= */
@@ -609,3 +718,58 @@ thead th {
     padding: 20px;
   }
 }
+
+/* --- PASSWORD RECOVERY FLOW --- */
+
+/* Inline success / error message box shown after form submission */
+.form-feedback {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.form-feedback.success {
+  background-color: rgba(0, 255, 127, 0.08);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.form-feedback.error {
+  background-color: rgba(255, 68, 68, 0.08);
+  border-color: #ff4444;
+  color: #ff4444;
+}
+
+/* Password strength bar track */
+.password-strength-bar {
+  height: 4px;
+  border-radius: 2px;
+  background-color: var(--border-color);
+  margin-top: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Animated fill — width and color set by JS */
+.password-strength-bar::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: var(--strength-width, 0%);
+  background-color: var(--strength-color, var(--border-color));
+  border-radius: 2px;
+  transition: width 0.35s ease, background-color 0.35s ease;
+}
+
+/* Small label underneath the bar ("Weak", "Medium", "Strong") */
+.password-strength-label {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 4px;
+  color: var(--text-muted);
+  transition: color 0.35s ease;
+}
+

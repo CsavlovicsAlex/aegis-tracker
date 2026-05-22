@@ -2,20 +2,36 @@
 // ui.js - PURE USER INTERFACE & DOM MANIPULATION (ASYNC)
 // ==========================================
 
-// --- 1. AUTHENTICATION UI (Remains synchronous because auth is currently local) ---
+// --- 1. AUTHENTICATION UI
+let inactivityTimer;
+const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutes in milliseconds
+
 async function handleLogin(event) {
   event.preventDefault();
   const username = document.getElementById('username').value;
-  const answer = await Database.login(username);
+  const password = document.getElementById('password').value;
+  const answer = await Database.login(username, password);
+
+  // --- 2FA GATE ---
+  if (answer === '2fa_required') {
+    // Nav stays hidden; route to the TOTP code entry view
+    document.getElementById('two-factor-form').reset();
+    document.getElementById('totp-feedback').style.display = 'none';
+    navigate('two-factor-view');
+    // Focus the code input so the user can type immediately
+    setTimeout(() => document.getElementById('totp-code').focus(), 150);
+    return;
+  }
 
   if (!answer) {
     alert("Incorrect credentials!");
     return;
   }
 
+  // --- NORMAL LOGIN SUCCESS ---
   document.getElementById('main-nav').style.display = 'flex';
 
-  const userData = JSON.parse(localStorage.getItem('currentUser'));
+  const userData = JSON.parse(sessionStorage.getItem('currentUser'));
   if (userData && userData.permissions.includes("VIEW_ALL_USERS")) {
     document.getElementById('nav-admin').style.display = 'block';
   } else {
@@ -24,6 +40,43 @@ async function handleLogin(event) {
 
   navigate('presentation-view');
   initChat();
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+
+  const usernameInput = document.getElementById('reg-username').value.trim();
+  const steamIdInput = document.getElementById('reg-steamid').value.trim();
+  const passwordInput = document.getElementById('reg-password').value;
+  const confirmPasswordInput = document.getElementById('reg-confirm-password').value;
+
+  // 1. Client-side security matching validation
+  if (passwordInput !== confirmPasswordInput) {
+    alert("Passwords do not match. Please try again.");
+    return;
+  }
+
+  if (passwordInput.length < 8) {
+    alert("Security requirement: Password must be at least 8 characters long.");
+    return;
+  }
+
+  try {
+    // 2. Execute network request through your existing Database handler
+    await Database.register(usernameInput, passwordInput, steamIdInput);
+
+    alert("Registration successful! You can now log in.");
+
+    // 3. Clear form inputs safely
+    document.getElementById('register-form').reset();
+
+    // 4. Smoothly route back to login using your custom navigate system
+    navigate('login-view');
+
+  } catch (error) {
+    // Displays exact error details passed up from Database.register
+    alert(`Registration Error: ${error.message}`);
+  }
 }
 
 function toggleLogoutBtn() {
@@ -41,6 +94,140 @@ function handleLogout() {
   document.getElementById('login-form').reset();
   navigate('login-view');
 }
+
+// --- 2. 2FA UI HANDLERS ---
+
+/**
+ * Handles the TOTP code submission on the two-factor-view.
+ * On success, finishes the login flow exactly like a normal login.
+ */
+async function handle2FAVerify(event) {
+  event.preventDefault();
+  const code = document.getElementById('totp-code').value.trim();
+  const btn = document.getElementById('totp-submit-btn');
+  const feedback = document.getElementById('totp-feedback');
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+  feedback.style.display = 'none';
+
+  const ok = await Database.verify2FA(code);
+
+  btn.disabled = false;
+  btn.textContent = 'Verify Code';
+
+  if (ok) {
+    // Mirror the normal post-login boot sequence
+    document.getElementById('main-nav').style.display = 'flex';
+    const userData = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (userData && userData.permissions.includes('VIEW_ALL_USERS')) {
+      document.getElementById('nav-admin').style.display = 'block';
+    } else {
+      document.getElementById('nav-admin').style.display = 'none';
+    }
+    navigate('presentation-view');
+    initChat();
+  } else {
+    feedback.className = 'form-feedback error';
+    feedback.textContent = '\u2717 Invalid or expired code. Please try again.';
+    feedback.style.display = 'block';
+    document.getElementById('totp-code').value = '';
+    document.getElementById('totp-code').focus();
+  }
+}
+
+/**
+ * Opens the 2FA setup view for a logged-in user.
+ * Calls /setup-2fa, then renders the returned provisioning URI as a QR code
+ * using the qrcode.js library loaded via CDN.
+ */
+async function openSetup2FA() {
+  navigate('setup-2fa-view');
+
+  const data = await Database.setup2FA();
+  if (!data) {
+    alert('Could not start 2FA setup. Please try again.');
+    return;
+  }
+
+  // Display the manual entry secret
+  document.getElementById('totp-secret-display').textContent = data.secret;
+
+  // Clear any previous QR code and render a fresh one
+  const canvas = document.getElementById('qrcode-canvas');
+  canvas.innerHTML = '';
+  new QRCode(canvas, {
+    text: data.provisioning_uri,
+    width: 200,
+    height: 200,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  // Reset the confirm form
+  document.getElementById('confirm-2fa-form').reset();
+  document.getElementById('confirm-2fa-feedback').style.display = 'none';
+}
+
+/**
+ * Handles the confirmation step of 2FA enrollment.
+ * Sends the typed code to /confirm-2fa; backend flips is_2fa_enabled = True.
+ */
+async function handle2FAConfirm(event) {
+  event.preventDefault();
+  const code = document.getElementById('confirm-totp-code').value.trim();
+  const btn = document.getElementById('confirm-2fa-btn');
+  const feedback = document.getElementById('confirm-2fa-feedback');
+
+  btn.disabled = true;
+  btn.textContent = 'Activating...';
+  feedback.style.display = 'none';
+
+  const ok = await Database.confirm2FA(code);
+
+  btn.disabled = false;
+  btn.textContent = 'Activate 2FA';
+
+  if (ok) {
+    feedback.className = 'form-feedback success';
+    feedback.textContent = '\u2713 2FA is now active on your account! You will need your authenticator app on next login.';
+    feedback.style.display = 'block';
+    // Disable the button so they can't re-confirm
+    btn.disabled = true;
+  } else {
+    feedback.className = 'form-feedback error';
+    feedback.textContent = '\u2717 Code was invalid or expired. Please re-scan the QR code and try again.';
+    feedback.style.display = 'block';
+    document.getElementById('confirm-totp-code').value = '';
+  }
+}
+
+function resetInactivityTimer() {
+  clearTimeout(inactivityTimer);
+
+  // Only start the timer if they are actually logged in
+  if (sessionStorage.getItem('jwt_token')) {
+    inactivityTimer = setTimeout(logoutDueToInactivity, INACTIVITY_LIMIT);
+  }
+}
+
+function logoutDueToInactivity() {
+  alert("You have been logged out due to inactivity.");
+
+  // Clear the sensitive data
+  sessionStorage.removeItem('jwt_token');
+  sessionStorage.removeItem('currentUser');
+
+  // Redirect to login view
+  navigate('login-view');
+}
+
+// Listen for activity across the whole document
+document.addEventListener('mousemove', resetInactivityTimer);
+document.addEventListener('keypress', resetInactivityTimer);
+document.addEventListener('click', resetInactivityTimer);
+document.addEventListener('scroll', resetInactivityTimer);
 
 // --- 2. MASTER VIEW (Infinite Scroll) ---
 let itemsPerLoad = 25;
@@ -421,10 +608,123 @@ async function loadSystemLogs() {
   });
 }
 
+// --- 7. PASSWORD RECOVERY UI ---
+
+/**
+ * Step 1: Sends the recovery request and shows inline feedback.
+ * The form is deliberately NOT cleared so the user can retry if they mistyped.
+ */
+async function handleForgotPassword(event) {
+  event.preventDefault();
+  const username = document.getElementById('recovery-username').value.trim();
+  const btn = document.getElementById('recovery-submit-btn');
+  const feedback = document.getElementById('recovery-feedback');
+
+  // Disable button to prevent double-clicks
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  feedback.style.display = 'none';
+
+  const ok = await Database.requestPasswordReset(username);
+
+  btn.disabled = false;
+  btn.textContent = 'Send Reset Link';
+
+  // Always show the generic success message (matches the backend's enumeration-safe response)
+  feedback.className = 'form-feedback success';
+  feedback.textContent = ok
+    ? '✓ If that username exists, a reset link has been printed to the server console.'
+    : '✗ Network error. Please check your connection and try again.';
+  feedback.style.display = 'block';
+}
+
+/**
+ * Step 2: Validates the two password fields client-side, then calls the API.
+ */
+async function handleResetPassword(event) {
+  event.preventDefault();
+  const token = document.getElementById('reset-token').value;
+  const newPassword = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('confirm-new-password').value;
+  const btn = document.getElementById('reset-submit-btn');
+  const feedback = document.getElementById('reset-feedback');
+
+  feedback.style.display = 'none';
+
+  // Client-side guard: passwords must match
+  if (newPassword !== confirmPassword) {
+    feedback.className = 'form-feedback error';
+    feedback.textContent = '✗ Passwords do not match. Please try again.';
+    feedback.style.display = 'block';
+    return;
+  }
+
+  // Client-side guard: minimum length (backend enforces 6, we ask for 8 here)
+  if (newPassword.length < 8) {
+    feedback.className = 'form-feedback error';
+    feedback.textContent = '✗ Password must be at least 8 characters.';
+    feedback.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Updating...';
+
+  const ok = await Database.submitNewPassword(token, newPassword);
+
+  btn.disabled = false;
+  btn.textContent = 'Update Password';
+
+  if (ok) {
+    feedback.className = 'form-feedback success';
+    feedback.textContent = '✓ Password updated! Redirecting you to login...';
+    feedback.style.display = 'block';
+    document.getElementById('reset-password-form').reset();
+    // Auto-redirect after 2 seconds so the user can read the success message
+    setTimeout(() => navigate('login-view'), 2000);
+  } else {
+    feedback.className = 'form-feedback error';
+    feedback.textContent = '✗ Reset link is invalid or has expired. Please request a new one.';
+    feedback.style.display = 'block';
+  }
+}
+
+/**
+ * Updates the animated password strength bar and label.
+ * Scoring is intentionally simple — it just counts character variety.
+ */
+function updatePasswordStrength(password) {
+  const bar = document.getElementById('password-strength-bar');
+  const label = document.getElementById('password-strength-label');
+
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  const levels = [
+    { width: '0%',   color: 'var(--border-color)', text: '' },
+    { width: '25%',  color: '#ff4444',             text: 'Weak' },
+    { width: '50%',  color: '#ff9900',             text: 'Fair' },
+    { width: '75%',  color: '#eab308',             text: 'Good' },
+    { width: '100%', color: 'var(--accent-green)', text: 'Strong' },
+    { width: '100%', color: 'var(--accent-green)', text: 'Strong' },
+  ];
+
+  const level = password.length === 0 ? levels[0] : levels[Math.max(1, score)];
+  bar.style.setProperty('--strength-width', level.width);
+  bar.style.setProperty('--strength-color', level.color);
+  label.textContent = level.text;
+  label.style.color = level.color;
+}
+
 // --- 6. ROUTING ---
 // ADDED ASYNC
 async function navigate(viewId) {
-  if (!Database.isLoggedIn() && viewId !== 'login-view') {
+  const publicViews = ['login-view', 'register-view', 'forgot-password-view', 'reset-password-view', 'two-factor-view', 'setup-2fa-view'];
+  if (!Database.isLoggedIn() && !publicViews.includes(viewId)) {
     alert("Please log in first!");
     return;
   }
@@ -439,8 +739,20 @@ async function navigate(viewId) {
   } else if (viewId === 'inventory-view') {
 
     // --- CONNECTING YOUR PYTHON STATS API TO CHART.JS ---
-    const rawAssetData = await Database.getAssetData();
-    const rawRarityData = await Database.getRarityData();
+    let rawAssetData;
+    let rawRarityData;
+    try {
+      rawAssetData = await Database.getAssetData();
+      rawRarityData = await Database.getRarityData();
+    } catch (error) {
+      if (error.message === "UNAUTHORIZED") {
+        alert("Session expired or unauthorized. Please log in.");
+        await navigate('login-view');
+      } else {
+        console.error("A generic network error occurred.");
+      }
+      return;
+    }
 
     // Transform Python dictionary into Chart.js friendly arrays
     currentAssetData = {
@@ -471,6 +783,9 @@ async function navigate(viewId) {
     await loadAdminPage(0);
   } else if (viewId === 'admin-view') {
     await switchAdminTab('suspects'); // Default to the suspects tab!
+  } else if (viewId === 'chat-view') {
+    const msgBox = document.getElementById('chat-messages');
+    msgBox.scrollTop = msgBox.scrollHeight;
   }
 }
 
@@ -486,13 +801,17 @@ window.addEventListener('liveDataReceived', async () => {
 let chatSocket = null;
 
 function initChat() {
-  // Un-hide the chat box now that we are logged in
-  document.getElementById('chat-container').style.display = 'flex';
+  // Connect to the SECURED chat WebSocket (sends JWT as first message)
+  chatSocket = connectToGlobalChat();
 
-  // Connect to the chat WebSocket! (Using your config variable)
-  chatSocket = new WebSocket(`${CONFIG.WS_BASE}/chat`);
+  // If auth failed (no token), abort silently
+  if (!chatSocket) {
+    console.warn("Chat not initialized — user not authenticated.");
+    return;
+  }
 
-  chatSocket.onmessage = function(event) {
+  // Attach the message handler for incoming chat messages
+  chatSocket.onmessage = function (event) {
     const messagesDiv = document.getElementById('chat-messages');
 
     // Add the new message to the UI
@@ -507,8 +826,8 @@ function sendChatMessage() {
   const input = document.getElementById('chat-input');
   if (input.value.trim() !== "" && chatSocket) {
 
-    // Grab the username from Local Storage
-    const userData = JSON.parse(localStorage.getItem('currentUser'));
+    // Grab the username from Session Storage (not localStorage!)
+    const userData = JSON.parse(sessionStorage.getItem('currentUser'));
     const username = userData ? userData.username : "Guest";
 
     // Format the message: "AegisAdmin: Hello!"
@@ -524,5 +843,26 @@ function sendChatMessage() {
 
 // Add event listener so pressing "Enter" sends the message
 document.getElementById('chat-input').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') sendChatMessage();
+  if (e.key === 'Enter') sendChatMessage();
 });
+
+// --- STARTUP: Auto-detect password reset token in the URL ---
+// When the user clicks the link printed to the console by the backend, the page
+// loads with a ?token= query parameter. We detect it here and route straight to
+// the reset form so they don't have to do anything manually.
+(function checkForResetToken() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+
+  if (token) {
+    // Inject the token into the hidden field on the reset form
+    document.getElementById('reset-token').value = token;
+
+    // Clean the token out of the URL bar (security: prevents bookmarking a one-time link)
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    // Route to the reset view — this view is public so no login check fires
+    navigate('reset-password-view');
+  }
+})();
+
