@@ -558,15 +558,22 @@ const Database = {
 
       const data = await response.json();
 
-      // Clean up the temporary pre-auth token
+      // Clean up the Level-1 pre-auth token — it has served its purpose
       sessionStorage.removeItem('pre_auth_token');
 
-      // Store the real session token — same as a normal login
+      // --- 3FA CASCADE ---
+      // The backend no longer returns a session token here.
+      // It returns a Level-2 pre-auth token that must pass biometrics first.
+      if (data.requires_3fa) {
+        sessionStorage.setItem('pre_auth_token_v2', data.pre_auth_token_v2);
+        console.log("2FA verified — awaiting biometric confirmation (3FA).");
+        return '3fa_required'; // Sentinel for the UI to switch to #three-factor-view
+      }
+
+      // Fallback: if for any reason the server returns a full token here, handle it
       this.currentUser = data.user.username;
       sessionStorage.setItem('jwt_token', data.access_token);
       sessionStorage.setItem('currentUser', JSON.stringify(data.user));
-
-      console.log("2FA verified! Logged in as:", data.user.username);
       return true;
 
     } catch (error) {
@@ -576,7 +583,55 @@ const Database = {
   },
 
   /**
+   * Step 3 (final) of the MFA login cascade.
+   * Sends the Level-2 pre-auth token to /verify-3fa (simulated biometric endpoint).
+   * On success, saves the real session token and cleans up all temporary tokens.
+   *
+   * @returns {Promise<boolean>} true on success
+   */
+  verify3FA: async function () {
+    const preAuthTokenV2 = sessionStorage.getItem('pre_auth_token_v2');
+    if (!preAuthTokenV2) {
+      console.error("verify3FA: No Level-2 pre-auth token found in session.");
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/verify-3fa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pre_auth_token_v2: preAuthTokenV2 })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        console.error("verify3FA failed:", err.detail);
+        return false;
+      }
+
+      const data = await response.json();
+
+      // Clean up ALL temporary pre-auth tokens
+      sessionStorage.removeItem('pre_auth_token');
+      sessionStorage.removeItem('pre_auth_token_v2');
+
+      // Store the real session token \u2014 login is now fully complete
+      this.currentUser = data.user.username;
+      sessionStorage.setItem('jwt_token', data.access_token);
+      sessionStorage.setItem('currentUser', JSON.stringify(data.user));
+
+      console.log("3FA complete! Logged in as:", data.user.username);
+      return true;
+
+    } catch (error) {
+      console.error("verify3FA: Network error \u2014", error);
+      return false;
+    }
+  },
+
+  /**
    * Step 1 of 2FA enrollment (user must be logged in).
+
    * Requests a fresh TOTP secret from the backend and returns
    * { provisioning_uri, secret } so the UI can render the QR code.
    *

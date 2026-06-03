@@ -790,13 +790,16 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(database
     return {"message": "Password updated successfully. You can now log in with your new password."}
 
 
-# --- 2FA SCHEMAS ---
+# --- 2FA / 3FA SCHEMAS ---
 class Verify2FARequest(BaseModel):
     pre_auth_token: str = Field(..., description="The 5-minute pre-auth JWT from the login response")
     code: str = Field(..., min_length=6, max_length=6, description="The 6-digit TOTP code")
 
 class Setup2FAConfirmRequest(BaseModel):
     code: str = Field(..., min_length=6, max_length=6, description="A valid code to confirm enrollment")
+
+class Verify3FARequest(BaseModel):
+    pre_auth_token_v2: str = Field(..., description="The 2-minute Level-2 pre-auth JWT from the /verify-2fa response")
 
 
 # --- 2FA ENDPOINTS ---
@@ -829,7 +832,45 @@ def verify_two_factor(payload: Verify2FARequest, db: Session = Depends(database.
             detail="Invalid or expired 2FA code."
         )
 
-    # 4. TOTP passed — mint the real full session token
+    # 4. TOTP passed — mint the Level-2 pre-auth token (2-minute window).
+    #    The real session token is NOT issued yet; the user must pass 3FA next.
+    level_2_token = security.create_level_2_pre_auth_token(user.id)
+
+    return {
+        "requires_3fa": True,
+        "pre_auth_token_v2": level_2_token
+    }
+
+
+@app.post("/verify-3fa")
+def verify_three_factor(payload: Verify3FARequest, db: Session = Depends(database.get_db)):
+    """
+    Step 3 (final) of the MFA login cascade.
+
+    Accepts the Level-2 pre-auth token issued by /verify-2fa and performs a
+    simulated biometric verification (auto-accepted in this lab implementation).
+
+    On success, issues the real 1-hour session token — completing the 3FA flow.
+    """
+    # 1. Verify the Level-2 token — ensures it's signed, unexpired, and level-2 scoped
+    user_id = security.verify_level_2_pre_auth_token(payload.pre_auth_token_v2)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Biometric session is invalid or has expired. Please log in again."
+        )
+
+    # 2. Fetch the user
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # 3. [SIMULATION] Biometric verification is auto-accepted.
+    #    In a real system this would call a hardware/platform API (e.g. WebAuthn,
+    #    Touch ID, Windows Hello) and block until the OS returns a signed assertion.
+    print(f"[3FA SIMULATION] Biometric scan accepted for user '{user.username}'.")
+
+    # 4. All three factors cleared — mint the real 1-hour session token
     role_name = user.role.name if user.role else "guest"
     permissions_list = [perm.name for perm in user.role.permissions] if user.role and user.role.permissions else []
 

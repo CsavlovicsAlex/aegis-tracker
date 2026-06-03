@@ -111,13 +111,20 @@ async function handle2FAVerify(event) {
   btn.textContent = 'Verifying...';
   feedback.style.display = 'none';
 
-  const ok = await Database.verify2FA(code);
+  const result = await Database.verify2FA(code);
 
   btn.disabled = false;
   btn.textContent = 'Verify Code';
 
-  if (ok) {
-    // Mirror the normal post-login boot sequence
+  // --- 3FA CASCADE ---
+  if (result === '3fa_required') {
+    // TOTP was correct — advance to the biometric step
+    navigate('three-factor-view');
+    return;
+  }
+
+  if (result === true) {
+    // Fallback: 2FA was the final step (shouldn't happen with 3FA enabled, but safe)
     document.getElementById('main-nav').style.display = 'flex';
     const userData = JSON.parse(sessionStorage.getItem('currentUser'));
     if (userData && userData.permissions.includes('VIEW_ALL_USERS')) {
@@ -133,6 +140,53 @@ async function handle2FAVerify(event) {
     feedback.style.display = 'block';
     document.getElementById('totp-code').value = '';
     document.getElementById('totp-code').focus();
+  }
+}
+
+/**
+ * Simulates a biometric hardware scan (3FA — the final authentication step).
+ *
+ * Flow:
+ *  1. Button enters a "Scanning..." disabled state to mimic hardware I/O delay.
+ *  2. After 1.5 seconds, calls /verify-3fa with the Level-2 pre-auth token.
+ *  3. On success, stores the real session token and boots the app normally.
+ *  4. On failure (expired token, network error), shows an error and sends the
+ *     user back to the login screen to restart.
+ */
+async function simulateBiometricScan() {
+  const btn = document.getElementById('biometric-scan-btn');
+  const feedback = document.getElementById('biometric-feedback');
+
+  // Step 1: Enter scanning state
+  btn.disabled = true;
+  btn.textContent = '\uD83D\uDD04 Scanning...';
+  feedback.style.display = 'none';
+
+  // Step 2: Simulate hardware delay (1.5 seconds)
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Step 3: Send Level-2 token to the backend
+  const ok = await Database.verify3FA();
+
+  if (ok) {
+    // Step 4a: Full login success — boot the app
+    document.getElementById('main-nav').style.display = 'flex';
+    const userData = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (userData && userData.permissions.includes('VIEW_ALL_USERS')) {
+      document.getElementById('nav-admin').style.display = 'block';
+    } else {
+      document.getElementById('nav-admin').style.display = 'none';
+    }
+    navigate('presentation-view');
+    initChat();
+  } else {
+    // Step 4b: Token expired or network error — restart the whole flow
+    feedback.className = 'form-feedback error';
+    feedback.textContent = '\u2717 Biometric session expired. Please log in again.';
+    feedback.style.display = 'block';
+    btn.textContent = '\uD83D\uDC41\uFE0F Scan Fingerprint';
+    // Re-enable so the user can retry once (in case it was a transient error)
+    btn.disabled = false;
   }
 }
 
@@ -723,7 +777,7 @@ function updatePasswordStrength(password) {
 // --- 6. ROUTING ---
 // ADDED ASYNC
 async function navigate(viewId) {
-  const publicViews = ['login-view', 'register-view', 'forgot-password-view', 'reset-password-view', 'two-factor-view', 'setup-2fa-view'];
+  const publicViews = ['login-view', 'register-view', 'forgot-password-view', 'reset-password-view', 'two-factor-view', 'setup-2fa-view', 'three-factor-view'];
   if (!Database.isLoggedIn() && !publicViews.includes(viewId)) {
     alert("Please log in first!");
     return;

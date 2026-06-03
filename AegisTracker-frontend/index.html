@@ -136,7 +136,42 @@
     </div>
   </section>
 
+  <!-- THREE-FACTOR VIEW: simulated biometric scan (final auth step) -->
+  <section id="three-factor-view" class="view">
+    <div class="login-container">
+      <div class="hero" style="margin-top: 0; margin-bottom: 30px;">
+        <h2>Biometric Verification</h2>
+        <p>One final step. Press the button to simulate a fingerprint scan.</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+          &#9201; This session expires in 2 minutes.
+        </p>
+      </div>
+      <div class="form-container" style="margin: 0 auto; text-align: center;">
+
+        <!-- Animated scan ring around the fingerprint button -->
+        <div class="biometric-ring" id="biometric-ring">
+          <button id="biometric-scan-btn"
+                  class="biometric-btn"
+                  onclick="simulateBiometricScan()"
+                  type="button">
+            &#x1F441;&#xFE0F; Scan Fingerprint
+          </button>
+        </div>
+
+        <div id="biometric-feedback" class="form-feedback" style="display: none; margin-top: 24px;"></div>
+
+        <div style="margin-top: 24px;">
+          <a href="#" onclick="navigate('login-view')"
+             style="color: var(--text-muted); text-decoration: none; font-size: 0.85rem;">
+            &larr; Cancel and return to login
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- 2FA SETUP VIEW: enrollment flow for logged-in users -->
+
   <section id="setup-2fa-view" class="view">
     <div class="login-container">
       <div class="hero" style="margin-top: 0; margin-bottom: 30px;">

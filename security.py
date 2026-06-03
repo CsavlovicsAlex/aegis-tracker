@@ -184,3 +184,45 @@ def verify_pre_auth_token(token: str) -> int | None:
     except jwt.InvalidTokenError:
         print("2FA Pre-Auth: Invalid token.")
         return None
+
+
+# --- 3FA LEVEL-2 PRE-AUTH TOKEN HELPERS ---
+
+def create_level_2_pre_auth_token(user_id: int) -> str:
+    """
+    Generates a narrow-scoped, 2-minute JWT issued AFTER a correct TOTP code
+    but BEFORE the simulated biometric (3rd factor) is verified.
+
+    The type claim "pre-auth-level-2" distinguishes it from the Level-1 token
+    so it can never be up-cast or misused at an earlier step.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=2)
+    payload = {
+        "sub": str(user_id),         # User ID — enough to issue the final token
+        "exp": expire,               # Strict 2-minute window
+        "type": "pre-auth-level-2"  # Scope guard for the /verify-3fa endpoint only
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def verify_level_2_pre_auth_token(token: str) -> int | None:
+    """
+    Decodes a Level-2 pre-auth JWT and returns the user_id (int) if valid.
+    Returns None if expired, invalid, or not a level-2 token.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        # Strictly enforce the level-2 scope — reject level-1 tokens too
+        if payload.get("type") != "pre-auth-level-2":
+            return None
+
+        user_id = payload.get("sub")
+        return int(user_id) if user_id is not None else None
+
+    except jwt.ExpiredSignatureError:
+        print("3FA Pre-Auth L2: Token has expired.")
+        return None
+    except jwt.InvalidTokenError:
+        print("3FA Pre-Auth L2: Invalid token.")
+        return None
