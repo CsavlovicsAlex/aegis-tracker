@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+tinydb
+faker
+alembic
+pytest
+httpx
