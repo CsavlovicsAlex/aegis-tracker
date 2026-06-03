@@ -2,7 +2,7 @@
 // database.js - API REPOSITORY & OFFLINE SYNC
 // ==========================================
 
-const API_BASE = CONFIG.API_BASE;
+// const API_BASE = CONFIG.API_BASE;
 
 const Database = {
   marketData: {
