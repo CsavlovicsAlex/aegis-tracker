@@ -6,3 +6,6 @@ faker
 alembic
 pytest
 httpx
+bcrypt
+PyJWT
+pyotp
