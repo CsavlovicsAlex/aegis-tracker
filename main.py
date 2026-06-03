@@ -23,6 +23,8 @@ from faker import Faker
 import models
 import database
 
+models.Base.metadata.create_all(bind=database.engine)
+
 app = FastAPI(title="Aegis Track API")
 
 app.add_middleware(
